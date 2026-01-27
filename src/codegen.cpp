@@ -20,7 +20,7 @@ namespace tuz {
 
 CodeGenerator::CodeGenerator()
     : context_(std::make_unique<llvm::LLVMContext>()),
-      module_(std::make_unique<llvm::Module>("forge_module", *context_)),
+      module_(std::make_unique<llvm::Module>("tuz_module", *context_)),
       builder_(std::make_unique<llvm::IRBuilder<>>(*context_)), current_function_(nullptr) {
 
   // Initialize LLVM

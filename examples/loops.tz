@@ -1,4 +1,4 @@
-// Loop examples in Forge
+// Loop examples in tuz 
 
 fn main() -> int {
     // For loop: sum 0 to 9

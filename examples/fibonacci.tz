@@ -1,4 +1,4 @@
-// Fibonacci sequence in Forge
+// Fibonacci sequence in tuz 
 
 fn main() -> int {
     // Calculate and return the 10th Fibonacci number
