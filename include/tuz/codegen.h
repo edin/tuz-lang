@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ast.h"
+#include "diagnostic.h"
 #include "type.h"
 
 #include <llvm/IR/BasicBlock.h>
@@ -17,10 +18,7 @@
 
 namespace tuz {
 
-class CodeGenError : public std::runtime_error {
-public:
-  CodeGenError(const std::string& msg) : std::runtime_error(msg) {}
-};
+
 
 class CodeGenerator : public ASTVisitor {
 public:

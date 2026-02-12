@@ -1,4 +1,5 @@
 #include "tuz/codegen.h"
+#include "tuz/diagnostic.h"
 
 #include <iostream>
 #include <llvm/ExecutionEngine/GenericValue.h>
@@ -196,7 +197,8 @@ void CodeGenerator::visit(StringLiteralExpr& expr) {
 void CodeGenerator::visit(VariableExpr& expr) {
   llvm::Value* var = get_variable(expr.name);
   if (!var) {
-    throw CodeGenError("Unknown variable: " + expr.name);
+    throw CodeGenError("unknown variable: '" + expr.name + "'",
+                       SourceLocation(expr.line, expr.column, expr.name.length()));
   }
 
   // Load the value (unless it's a pointer we're taking the address of)
@@ -253,7 +255,8 @@ void CodeGenerator::visit(CallExpr& expr) {
   auto& var_expr = static_cast<VariableExpr&>(*expr.callee);
   llvm::Function* callee = module_->getFunction(var_expr.name);
   if (!callee) {
-    throw CodeGenError("Unknown function: " + var_expr.name);
+    throw CodeGenError("unknown function: '" + var_expr.name + "'",
+                       SourceLocation(expr.line, expr.column, var_expr.name.length()));
   }
 
   // Generate arguments
@@ -346,7 +349,8 @@ void CodeGenerator::visit(AssignStmt& stmt) {
     auto& var = static_cast<VariableExpr&>(*stmt.target);
     llvm::Value* ptr = get_variable(var.name);
     if (!ptr) {
-      throw CodeGenError("Unknown variable: " + var.name);
+      throw CodeGenError("unknown variable: '" + var.name + "'",
+                         SourceLocation(var.line, var.column, var.name.length()));
     }
     builder_->CreateStore(val, ptr);
   } else if (stmt.target->kind == ExprKind::Index) {
