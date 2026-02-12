@@ -24,9 +24,9 @@ fn fib_iter(n: int) -> int {
         return 1;
     }
     
-    let a = 0;
-    let b = 1;
-    let i = 2;
+    let mut a = 0;
+    let mut b = 1;
+    let mut i = 2;
     
     while i <= n {
         let temp = a + b;

@@ -139,11 +139,12 @@ void CodeGenerator::exit_scope() {
   }
 }
 
-void CodeGenerator::set_variable(const std::string& name, llvm::Value* alloca) {
+void CodeGenerator::set_variable(const std::string& name, llvm::Value* alloca,
+                                 bool is_mutable) {
   if (named_values_.empty()) {
     named_values_.emplace_back();
   }
-  named_values_.back()[name] = alloca;
+  named_values_.back()[name] = VariableInfo{alloca, is_mutable};
 }
 
 llvm::Value* CodeGenerator::get_variable(const std::string& name) {
@@ -151,7 +152,7 @@ llvm::Value* CodeGenerator::get_variable(const std::string& name) {
   for (auto it = named_values_.rbegin(); it != named_values_.rend(); ++it) {
     auto found = it->find(name);
     if (found != it->end()) {
-      return found->second;
+      return found->second.value;
     }
   }
   // Check for global
@@ -160,6 +161,22 @@ llvm::Value* CodeGenerator::get_variable(const std::string& name) {
     return global;
   }
   return nullptr;
+}
+
+bool CodeGenerator::is_variable_mutable(const std::string& name) {
+  // Search from innermost scope outward for local variables
+  for (auto it = named_values_.rbegin(); it != named_values_.rend(); ++it) {
+    auto found = it->find(name);
+    if (found != it->end()) {
+      return found->second.is_mutable;
+    }
+  }
+  // Globals are always considered mutable for now
+  llvm::GlobalVariable* global = module_->getNamedGlobal(name);
+  if (global) {
+    return true;
+  }
+  return false;
 }
 
 llvm::AllocaInst* CodeGenerator::create_alloca(llvm::Type* type, const std::string& name) {
@@ -338,7 +355,7 @@ void CodeGenerator::visit(LetStmt& stmt) {
     builder_->CreateStore(init_val, alloca);
   }
 
-  set_variable(stmt.name, alloca);
+  set_variable(stmt.name, alloca, stmt.is_mutable);
 }
 
 void CodeGenerator::visit(AssignStmt& stmt) {
@@ -350,6 +367,11 @@ void CodeGenerator::visit(AssignStmt& stmt) {
     llvm::Value* ptr = get_variable(var.name);
     if (!ptr) {
       throw CodeGenError("unknown variable: '" + var.name + "'",
+                         SourceLocation(var.line, var.column, var.name.length()));
+    }
+    // Check if variable is mutable
+    if (!is_variable_mutable(var.name)) {
+      throw CodeGenError("cannot assign to immutable variable '" + var.name + "'",
                          SourceLocation(var.line, var.column, var.name.length()));
     }
     builder_->CreateStore(val, ptr);

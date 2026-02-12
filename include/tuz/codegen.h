@@ -76,8 +76,14 @@ private:
   // Value stack for expression results
   std::vector<llvm::Value*> value_stack_;
 
-  // Named values (variables) - maps name to alloca
-  std::vector<std::unordered_map<std::string, llvm::Value*>> named_values_;
+  // Variable info including mutability
+  struct VariableInfo {
+    llvm::Value* value;
+    bool is_mutable;
+  };
+
+  // Named values (variables) - maps name to variable info
+  std::vector<std::unordered_map<std::string, VariableInfo>> named_values_;
 
   // Function and struct definitions
   std::unordered_map<std::string, llvm::Function*> functions_;
@@ -102,7 +108,8 @@ private:
 
   // Variable management
   llvm::Value* get_variable(const std::string& name);
-  void set_variable(const std::string& name, llvm::Value* alloca);
+  bool is_variable_mutable(const std::string& name);
+  void set_variable(const std::string& name, llvm::Value* alloca, bool is_mutable = false);
   void enter_scope();
   void exit_scope();
 
