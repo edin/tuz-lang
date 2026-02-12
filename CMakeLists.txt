@@ -38,6 +38,7 @@ set(TUZ_SOURCES
     src/codegen.cpp
     src/type.cpp
     src/driver.cpp
+    src/diagnostic.cpp
     src/main.cpp
 )
 
@@ -57,3 +58,34 @@ target_compile_options(tuzc PRIVATE
 
 # Install
 install(TARGETS tuzc DESTINATION bin)
+
+# Tests
+enable_testing()
+
+set(TEST_SOURCES
+    tests/test_diagnostic.cpp
+    tests/test_integration.cpp
+)
+
+# Diagnostic unit tests
+add_executable(test_diagnostic tests/test_diagnostic.cpp src/diagnostic.cpp)
+target_include_directories(test_diagnostic PRIVATE include)
+target_compile_options(test_diagnostic PRIVATE -Wall -Wextra)
+add_test(NAME diagnostic COMMAND test_diagnostic)
+
+# Integration tests (exclude main.cpp)
+set(TUZ_LIB_SOURCES
+    src/lexer.cpp
+    src/parser.cpp
+    src/ast.cpp
+    src/codegen.cpp
+    src/type.cpp
+    src/driver.cpp
+    src/diagnostic.cpp
+)
+add_executable(test_integration tests/test_integration.cpp ${TUZ_LIB_SOURCES})
+target_include_directories(test_integration PRIVATE include ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(test_integration PRIVATE ${LLVM_DEFINITIONS})
+target_link_libraries(test_integration ${llvm_libs})
+target_compile_options(test_integration PRIVATE -Wall -Wextra -Wno-unused-parameter)
+add_test(NAME integration COMMAND test_integration)
