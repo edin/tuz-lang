@@ -1,7 +1,6 @@
 #include "tuz/lexer.h"
 
 #include <cctype>
-#include <unordered_map>
 
 namespace tuz {
 
@@ -15,35 +14,37 @@ Lexer::Lexer(std::string_view source)
 std::vector<Token> Lexer::tokenize() {
   std::vector<Token> tokens;
 
-  while (current_ != '\0') {
-    tokens.push_back(next_token());
-  }
+    while (true) {
+        auto token = next_token();
+        tokens.push_back(token);
 
-  tokens.emplace_back(TokenType::END_OF_FILE, "", line_, column_);
+        if (token.type == TokenType::END_OF_FILE)
+            break;
+    }
+
   return tokens;
 }
 
+
+void Lexer::skip_ignored() {
+  while (true) {
+    skip_whitespace();
+    if (!skip_comment())
+      break;
+  } 
+}
+
 Token Lexer::next_token() {
-  skip_whitespace();
+  skip_ignored();
 
-  if (current_ == '\0') {
-    return make_token(TokenType::END_OF_FILE);
-  }
+  auto location = current_location();
 
-  uint32_t start_line = line_;
-  uint32_t start_col = column_;
-
-  // Comments
-  if (current_ == '/' && position_ + 1 < source_.size()) {
-    char next = source_[position_ + 1];
-    if (next == '/' || next == '*') {
-      skip_comment();
-      return next_token();
-    }
+  if (is_at_end()) {
+    return Token(TokenType::END_OF_FILE, "", location);
   }
 
   // Identifiers and keywords
-  if (is_alpha(current_) || current_ == '_') {
+  if (is_identifier_start(current_)) {
     return identifier();
   }
 
@@ -53,119 +54,56 @@ Token Lexer::next_token() {
   }
 
   // Strings
-  if (current_ == '"') {
+  if (is_string_start(current_)) {
     return string();
   }
 
-  // Multi-character operators
-  switch (current_) {
-  case '=':
-    advance();
-    if (current_ == '=') {
-      advance();
-      return Token(TokenType::EQ, "==", start_line, start_col);
+  // Operators and delimiters
+  // Note: Tokens are sorted by the length
+  for (auto& token: Tokens) {
+    if (try_consume(token.value)) {
+        return Token(token.type, token.value, location);
     }
-    return Token(TokenType::ASSIGN, "=", start_line, start_col);
-
-  case '!':
-    advance();
-    if (current_ == '=') {
-      advance();
-      return Token(TokenType::NEQ, "!=", start_line, start_col);
-    }
-    return Token(TokenType::NOT, "!", start_line, start_col);
-
-  case '<':
-    advance();
-    if (current_ == '=') {
-      advance();
-      return Token(TokenType::LEQ, "<=", start_line, start_col);
-    }
-    return Token(TokenType::LT, "<", start_line, start_col);
-
-  case '>':
-    advance();
-    if (current_ == '=') {
-      advance();
-      return Token(TokenType::GEQ, ">=", start_line, start_col);
-    }
-    return Token(TokenType::GT, ">", start_line, start_col);
-
-  case '&':
-    advance();
-    if (current_ == '&') {
-      advance();
-      return Token(TokenType::AND, "&&", start_line, start_col);
-    }
-    return Token(TokenType::AMPERSAND, "&", start_line, start_col);
-
-  case '|':
-    advance();
-    if (current_ == '|') {
-      advance();
-      return Token(TokenType::OR, "||", start_line, start_col);
-    }
-    // Single | is not used in our language
-    return make_token(TokenType::END_OF_FILE);
-
-  case '-':
-    advance();
-    if (current_ == '>') {
-      advance();
-      return Token(TokenType::ARROW, "->", start_line, start_col);
-    }
-    return Token(TokenType::MINUS, "-", start_line, start_col);
   }
 
-  // Single-character tokens
-  switch (current_) {
-  case '+':
-    advance();
-    return Token(TokenType::PLUS, "+", start_line, start_col);
-  case '*':
-    advance();
-    return Token(TokenType::STAR, "*", start_line, start_col);
-  case '/':
-    advance();
-    return Token(TokenType::SLASH, "/", start_line, start_col);
-  case '%':
-    advance();
-    return Token(TokenType::PERCENT, "%", start_line, start_col);
-  case '(':
-    advance();
-    return Token(TokenType::LPAREN, "(", start_line, start_col);
-  case ')':
-    advance();
-    return Token(TokenType::RPAREN, ")", start_line, start_col);
-  case '{':
-    advance();
-    return Token(TokenType::LBRACE, "{", start_line, start_col);
-  case '}':
-    advance();
-    return Token(TokenType::RBRACE, "}", start_line, start_col);
-  case '[':
-    advance();
-    return Token(TokenType::LBRACKET, "[", start_line, start_col);
-  case ']':
-    advance();
-    return Token(TokenType::RBRACKET, "]", start_line, start_col);
-  case ';':
-    advance();
-    return Token(TokenType::SEMICOLON, ";", start_line, start_col);
-  case ':':
-    advance();
-    return Token(TokenType::COLON, ":", start_line, start_col);
-  case ',':
-    advance();
-    return Token(TokenType::COMMA, ",", start_line, start_col);
-  case '.':
-    advance();
-    return Token(TokenType::DOT, ".", start_line, start_col);
-  }
-
-  // Unknown character
+  // Invalid token
+  auto invalidChar = std::string(1, current_);
   advance();
-  return make_token(TokenType::END_OF_FILE);
+  return Token(TokenType::INVALID,  invalidChar , location);
+}
+
+bool Lexer::try_consume(std::string_view value) {
+    if (position_ + value.size() > source_.size())
+      return false;
+
+    if (std::string_view(source_.data() + position_, value.size()) != value)
+      return false;
+
+    for (size_t i = 0; i < value.size(); ++i) {
+        advance();
+    }
+    return true;
+}
+
+bool Lexer::is_at_end() {
+  return position_ >= source_.size();
+}
+
+void Lexer::advance_while(LexPredicate predicate) {
+  while (!is_at_end() && predicate(current_)) {
+    advance();
+  }
+}
+
+bool Lexer::advance_if(std::string_view chars) {
+    if (is_at_end())
+      return false;
+
+    if (chars.find(current_) != std::string_view::npos) {
+        advance();
+        return true;
+    }
+    return false;
 }
 
 void Lexer::advance() {
@@ -185,36 +123,29 @@ void Lexer::advance() {
 }
 
 void Lexer::skip_whitespace() {
-  while (current_ == ' ' || current_ == '\t' || current_ == '\n' || current_ == '\r') {
-    advance();
-  }
+  advance_while(&Lexer::is_whitespace);
 }
 
-void Lexer::skip_comment() {
-  if (current_ == '/' && position_ + 1 < source_.size()) {
-    if (source_[position_ + 1] == '/') {
-      // Line comment
-      while (current_ != '\0' && current_ != '\n') {
-        advance();
-      }
-    } else if (source_[position_ + 1] == '*') {
-      // Block comment
-      advance(); // skip /
-      advance(); // skip *
-      while (current_ != '\0') {
-        if (current_ == '*' && position_ + 1 < source_.size() && source_[position_ + 1] == '/') {
-          advance();
-          advance();
-          break;
-        }
-        advance();
-      }
-    }
-  }
-}
+bool Lexer::skip_comment() {
 
-Token Lexer::make_token(TokenType type) {
-  return Token(type, std::string_view(&source_[position_ - 1], 1), line_, column_ - 1);
+  if (try_consume("//")) {
+      while (!is_at_end() && current_ != '\n')
+          advance();
+      return true;
+  }
+  else if (try_consume("/*"))
+  {
+      // TODO: Ensure if closing comment is present
+      // TODO: Nested block comments
+      while (!is_at_end()) {
+          if (try_consume("*/"))
+              break;
+          advance();
+      }
+      return true;
+  }
+  return false;
+
 }
 
 Token Lexer::make_token(TokenType type, std::string_view text) {
@@ -222,69 +153,57 @@ Token Lexer::make_token(TokenType type, std::string_view text) {
 }
 
 Token Lexer::identifier() {
-  uint32_t start_line = line_;
-  uint32_t start_col = column_;
-  size_t start_pos = position_;
+  auto location = current_location();
+  auto start_pos = position_;
 
-  while (is_alphanumeric(current_) || current_ == '_') {
-    advance();
-  }
+  advance_while(&Lexer::is_identifier);
 
   std::string_view text(source_.data() + start_pos, position_ - start_pos);
 
   auto keyword = get_keyword(text);
+
   if (keyword) {
-    return Token(*keyword, text, start_line, start_col);
+    return Token(*keyword, text, location);
   }
 
-  return Token(TokenType::IDENTIFIER, text, start_line, start_col);
+  return Token(TokenType::IDENTIFIER, text, location);
 }
 
 Token Lexer::number() {
-  uint32_t start_line = line_;
-  uint32_t start_col = column_;
-  size_t start_pos = position_;
-  bool is_float = false;
+  auto location = current_location();
+  auto start_pos = position_;
+  auto is_float = false;
 
-  while (is_digit(current_)) {
-    advance();
-  }
+  advance_while(&Lexer::is_digit);
 
-  if (current_ == '.') {
+  if (advance_if(".")) {
     is_float = true;
-    advance();
-    while (is_digit(current_)) {
-      advance();
-    }
+    advance_while(&Lexer::is_digit);
   }
 
   // Exponent
-  if (current_ == 'e' || current_ == 'E') {
+  if (advance_if("eE")) {
+    // TODO: Ensure number is present after e
     is_float = true;
-    advance();
-    if (current_ == '+' || current_ == '-') {
-      advance();
-    }
-    while (is_digit(current_)) {
-      advance();
-    }
+    advance_if("+-");
+    advance_while(&Lexer::is_digit);
   }
 
   std::string_view text(source_.data() + start_pos, position_ - start_pos);
 
-  if (is_float) {
-    return Token(TokenType::FLOAT_LITERAL, text, start_line, start_col);
-  }
-  return Token(TokenType::INTEGER_LITERAL, text, start_line, start_col);
+  auto token_type = is_float 
+    ? TokenType::FLOAT_LITERAL 
+    : TokenType::INTEGER_LITERAL;
+
+  return Token(token_type, text, location);
 }
 
 Token Lexer::string() {
-  uint32_t start_line = line_;
-  uint32_t start_col = column_;
+  auto location = current_location();
   advance(); // skip opening quote
 
   std::string value;
-  while (current_ != '"' && current_ != '\0') {
+  while (!is_at_end() && current_ != '"') {
     if (current_ == '\\') {
       advance();
       switch (current_) {
@@ -320,7 +239,7 @@ Token Lexer::string() {
     advance(); // skip closing quote
   }
 
-  return Token(TokenType::STRING_LITERAL, value, start_line, start_col);
+  return Token(TokenType::STRING_LITERAL, value, location);
 }
 
 bool Lexer::is_alpha(char c) {
@@ -335,24 +254,31 @@ bool Lexer::is_alphanumeric(char c) {
   return is_alpha(c) || is_digit(c);
 }
 
-std::optional<TokenType> Lexer::get_keyword(std::string_view text) {
-  static const std::unordered_map<std::string_view, TokenType> keywords = {
-      {"fn", TokenType::FN},     {"let", TokenType::LET},       {"mut", TokenType::MUT},
-      {"if", TokenType::IF},     {"else", TokenType::ELSE},     {"while", TokenType::WHILE},
-      {"for", TokenType::FOR},   {"return", TokenType::RETURN}, {"struct", TokenType::STRUCT},
-      {"true", TokenType::TRUE}, {"false", TokenType::FALSE},   {"extern", TokenType::EXTERN},
-      {"int", TokenType::INT},   {"float", TokenType::FLOAT},   {"bool", TokenType::BOOL},
-      {"void", TokenType::VOID}, {"i8", TokenType::I8},         {"i16", TokenType::I16},
-      {"i32", TokenType::I32},   {"i64", TokenType::I64},       {"u8", TokenType::U8},
-      {"u16", TokenType::U16},   {"u32", TokenType::U32},       {"u64", TokenType::U64},
-      {"f32", TokenType::F32},   {"f64", TokenType::F64},
-  };
+bool Lexer::is_identifier_start(char c) {
+  return is_alpha(c) || c == '_';
+}
 
-  auto it = keywords.find(text);
-  if (it != keywords.end()) {
-    return it->second;
-  }
-  return std::nullopt;
+bool Lexer::is_identifier(char c) {
+  return is_alphanumeric(c) || c == '_';
+}
+
+bool Lexer::is_string_start(char c) {
+  return c == '"';
+}
+
+bool Lexer::is_whitespace(char c) {
+  return c == ' ' || 
+         c == '\t' || 
+         c == '\n' || 
+         c == '\r';
+}
+
+Location Lexer::current_location() const {
+  return {line_, column_ };
+}
+
+std::optional<TokenType> Lexer::get_keyword(std::string_view text) {
+  return get_keyword_token_type(text);
 }
 
 } // namespace tuz

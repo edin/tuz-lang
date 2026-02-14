@@ -2,11 +2,26 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
+#include <vector>
+#include <unordered_map>
+#include <optional>
 
 namespace tuz {
 
+enum class TokenGroup {
+  KEYWORD,
+  IDENTIFIER,
+  LITERAL,
+  OPERATOR,
+  DELIMITER,
+  TYPE,
+  OTHER
+};
+
 // Token types for our language
 enum class TokenType {
+  INVALID,
   // End of file
   END_OF_FILE,
 
@@ -81,6 +96,12 @@ enum class TokenType {
   DOT,       // .
 };
 
+struct Location {
+  uint32_t line;
+  uint32_t column;
+};
+
+
 struct Token {
   TokenType type;
   std::string text;
@@ -90,6 +111,9 @@ struct Token {
   Token(TokenType t, std::string_view txt, uint32_t ln, uint32_t col)
       : type(t), text(txt), line(ln), column(col) {}
 
+  Token(TokenType t, std::string_view txt, Location location)
+      : type(t), text(txt), line(location.line), column(location.column) {}      
+
   bool is(TokenType t) const { return type == t; }
   bool is_one_of(TokenType t1, TokenType t2) const { return is(t1) || is(t2); }
   template <typename... Ts> bool is_one_of(TokenType t1, TokenType t2, Ts... ts) const {
@@ -97,6 +121,18 @@ struct Token {
   }
 };
 
+struct TokenDefinition {
+  TokenType type;
+  std::string value;
+};
+
+
 const char* token_type_to_string(TokenType type);
+TokenGroup get_token_group(TokenType tokenType);
+std::optional<TokenType> get_keyword_token_type(std::string_view token);
+
+extern const std::vector<TokenDefinition> Keywords;
+extern const std::vector<TokenDefinition> Tokens;
+extern const std::vector<TokenDefinition> SpecialTokens;
 
 } // namespace tuz

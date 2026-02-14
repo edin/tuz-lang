@@ -33,6 +33,7 @@ include_directories(include)
 # Source files
 set(TUZ_SOURCES
     src/lexer.cpp
+    src/token.cpp
     src/parser.cpp
     src/ast.cpp
     src/codegen.cpp

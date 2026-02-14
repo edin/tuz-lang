@@ -711,7 +711,7 @@ void CodeGenerator::dump_ir(const std::string& filename) {
 void CodeGenerator::compile_to_object(const std::string& filename) {
   std::string target_triple_str = llvm::sys::getDefaultTargetTriple();
   llvm::Triple target_triple(target_triple_str);
-  module_->setTargetTriple(target_triple);
+  module_->setTargetTriple(target_triple.str());
 
   std::string error;
   auto target = llvm::TargetRegistry::lookupTarget(target_triple_str, error);
@@ -737,7 +737,8 @@ void CodeGenerator::compile_to_object(const std::string& filename) {
   }
 
   llvm::legacy::PassManager pass;
-  auto file_type = llvm::CodeGenFileType::ObjectFile;
+  auto file_type = llvm::CGFT_ObjectFile;
+
 
   if (target_machine->addPassesToEmitFile(pass, dest, nullptr, file_type)) {
     std::cerr << "Target machine can't emit file of this type" << std::endl;
