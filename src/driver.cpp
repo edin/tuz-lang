@@ -2,33 +2,30 @@
 
 #include "tuz/ast.h"
 #include "tuz/codegen.h"
+#include "tuz/diagnostic.h"
 #include "tuz/lexer.h"
 #include "tuz/parser.h"
 
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 
 namespace tuz {
 
-static std::string read_file(const std::string& path) {
-  std::ifstream file(path);
-  if (!file) {
-    std::cerr << "Error: Could not open file: " << path << std::endl;
-    return "";
-  }
-  std::stringstream buffer;
-  buffer << file.rdbuf();
-  return buffer.str();
-}
-
 bool Driver::compile(const CompileOptions& options) {
-  // Read source file
-  std::string source = read_file(options.input_file);
-  if (source.empty()) {
+  // Set up diagnostic system
+  auto source_manager = std::make_shared<SourceManager>();
+  auto source_file = source_manager->load_file(options.input_file);
+  if (!source_file) {
+    std::cerr << "Error: Could not open file: " << options.input_file << std::endl;
     return false;
   }
+  source_manager->set_main_file(source_file);
+
+  // Create diagnostic engine with console output
+  auto& diagnostics = get_global_diagnostics();
+  diagnostics.set_source_manager(source_manager);
+  diagnostics.set_consumer(std::make_unique<ConsoleDiagnosticConsumer>(true, true));
+  diagnostics.reset();
 
   if (options.verbose) {
     std::cout << "Compiling: " << options.input_file << std::endl;
@@ -37,12 +34,12 @@ bool Driver::compile(const CompileOptions& options) {
   // Lexing
   if (options.verbose)
     std::cout << "  Lexing..." << std::endl;
-  Lexer lexer(source);
+  Lexer lexer(source_file->content());
   std::vector<Token> tokens;
   try {
     tokens = lexer.tokenize();
   } catch (const std::exception& e) {
-    std::cerr << "Lexer error: " << e.what() << std::endl;
+    diagnostics.error(e.what());
     return false;
   }
 
@@ -58,11 +55,10 @@ bool Driver::compile(const CompileOptions& options) {
   try {
     program = parser.parse_program();
   } catch (const ParseError& e) {
-    std::cerr << "Parse error at line " << e.line << ", column " << e.column << ": " << e.what()
-              << std::endl;
+    diagnostics.error(e.what(), SourceLocation(e.line, e.column), source_file);
     return false;
   } catch (const std::exception& e) {
-    std::cerr << "Parse error: " << e.what() << std::endl;
+    diagnostics.error(e.what());
     return false;
   }
 
@@ -77,10 +73,14 @@ bool Driver::compile(const CompileOptions& options) {
   try {
     codegen.generate(program);
   } catch (const CodeGenError& e) {
-    std::cerr << "Code generation error: " << e.what() << std::endl;
+    if (e.has_location()) {
+      diagnostics.error(e.what(), e.location(), source_file);
+    } else {
+      diagnostics.error(e.what());
+    }
     return false;
   } catch (const std::exception& e) {
-    std::cerr << "Code generation error: " << e.what() << std::endl;
+    diagnostics.error(e.what());
     return false;
   }
 
