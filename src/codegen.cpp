@@ -1,4 +1,5 @@
 #include "tuz/codegen.h"
+
 #include "tuz/diagnostic.h"
 
 #include <iostream>
@@ -139,8 +140,7 @@ void CodeGenerator::exit_scope() {
   }
 }
 
-void CodeGenerator::set_variable(const std::string& name, llvm::Value* alloca,
-                                 bool is_mutable) {
+void CodeGenerator::set_variable(const std::string& name, llvm::Value* alloca, bool is_mutable) {
   if (named_values_.empty()) {
     named_values_.emplace_back();
   }
@@ -764,7 +764,6 @@ void CodeGenerator::compile_to_object(const std::string& filename) {
 
   llvm::legacy::PassManager pass;
   auto file_type = llvm::CGFT_ObjectFile;
-
 
   if (target_machine->addPassesToEmitFile(pass, dest, nullptr, file_type)) {
     std::cerr << "Target machine can't emit file of this type" << std::endl;

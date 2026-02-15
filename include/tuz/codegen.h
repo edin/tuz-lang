@@ -18,8 +18,6 @@
 
 namespace tuz {
 
-
-
 class CodeGenerator : public ASTVisitor {
 public:
   CodeGenerator();

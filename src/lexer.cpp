@@ -4,34 +4,29 @@
 
 namespace tuz {
 
-Lexer::Lexer(std::string_view source)
-    : source_(source), position_(0), line_(1), column_(1), current_(0) {
-  if (!source_.empty()) {
-    current_ = source_[0];
-  }
+Lexer::Lexer(std::string_view source) : source_(source), position_(0), line_(1), column_(1) {
 }
 
 std::vector<Token> Lexer::tokenize() {
   std::vector<Token> tokens;
 
-    while (true) {
-        auto token = next_token();
-        tokens.push_back(token);
+  while (true) {
+    auto token = next_token();
+    tokens.push_back(token);
 
-        if (token.type == TokenType::END_OF_FILE)
-            break;
-    }
+    if (token.type == TokenType::END_OF_FILE)
+      break;
+  }
 
   return tokens;
 }
-
 
 void Lexer::skip_ignored() {
   while (true) {
     skip_whitespace();
     if (!skip_comment())
       break;
-  } 
+  }
 }
 
 Token Lexer::next_token() {
@@ -43,46 +38,48 @@ Token Lexer::next_token() {
     return Token(TokenType::END_OF_FILE, "", location);
   }
 
+  auto ch = peek();
+
   // Identifiers and keywords
-  if (is_identifier_start(current_)) {
+  if (is_identifier_start(ch)) {
     return identifier();
   }
 
   // Numbers
-  if (is_digit(current_)) {
+  if (is_digit(ch)) {
     return number();
   }
 
   // Strings
-  if (is_string_start(current_)) {
+  if (is_string_start(ch)) {
     return string();
   }
 
   // Operators and delimiters
   // Note: Tokens are sorted by the length
-  for (auto& token: Tokens) {
+  for (auto& token : Tokens) {
     if (try_consume(token.value)) {
-        return Token(token.type, token.value, location);
+      return Token(token.type, token.value, location);
     }
   }
 
   // Invalid token
-  auto invalidChar = std::string(1, current_);
+  auto invalidChar = std::string(1, ch);
   advance();
-  return Token(TokenType::INVALID,  invalidChar , location);
+  return Token(TokenType::INVALID, invalidChar, location);
 }
 
 bool Lexer::try_consume(std::string_view value) {
-    if (position_ + value.size() > source_.size())
-      return false;
+  if (position_ + value.size() > source_.size())
+    return false;
 
-    if (std::string_view(source_.data() + position_, value.size()) != value)
-      return false;
+  if (std::string_view(source_.data() + position_, value.size()) != value)
+    return false;
 
-    for (size_t i = 0; i < value.size(); ++i) {
-        advance();
-    }
-    return true;
+  for (size_t i = 0; i < value.size(); ++i) {
+    advance();
+  }
+  return true;
 }
 
 bool Lexer::is_at_end() {
@@ -90,36 +87,31 @@ bool Lexer::is_at_end() {
 }
 
 void Lexer::advance_while(LexPredicate predicate) {
-  while (!is_at_end() && predicate(current_)) {
+  while (!is_at_end() && predicate(peek())) {
     advance();
   }
 }
 
 bool Lexer::advance_if(std::string_view chars) {
-    if (is_at_end())
-      return false;
-
-    if (chars.find(current_) != std::string_view::npos) {
-        advance();
-        return true;
-    }
+  if (is_at_end())
     return false;
+
+  if (chars.find(peek()) != std::string_view::npos) {
+    advance();
+    return true;
+  }
+  return false;
 }
 
 void Lexer::advance() {
-  if (current_ == '\n') {
+  auto current = peek();
+  if (current == '\n') {
     line_++;
     column_ = 1;
   } else {
     column_++;
   }
-
   position_++;
-  if (position_ < source_.size()) {
-    current_ = source_[position_];
-  } else {
-    current_ = '\0';
-  }
 }
 
 void Lexer::skip_whitespace() {
@@ -129,23 +121,20 @@ void Lexer::skip_whitespace() {
 bool Lexer::skip_comment() {
 
   if (try_consume("//")) {
-      while (!is_at_end() && current_ != '\n')
-          advance();
-      return true;
-  }
-  else if (try_consume("/*"))
-  {
-      // TODO: Ensure if closing comment is present
-      // TODO: Nested block comments
-      while (!is_at_end()) {
-          if (try_consume("*/"))
-              break;
-          advance();
-      }
-      return true;
+    while (!is_at_end() && peek() != '\n')
+      advance();
+    return true;
+  } else if (try_consume("/*")) {
+    // TODO: Ensure if closing comment is present
+    // TODO: Nested block comments
+    while (!is_at_end()) {
+      if (try_consume("*/"))
+        break;
+      advance();
+    }
+    return true;
   }
   return false;
-
 }
 
 Token Lexer::make_token(TokenType type, std::string_view text) {
@@ -160,7 +149,7 @@ Token Lexer::identifier() {
 
   std::string_view text(source_.data() + start_pos, position_ - start_pos);
 
-  auto keyword = get_keyword(text);
+  auto keyword = get_keyword_token_type(text);
 
   if (keyword) {
     return Token(*keyword, text, location);
@@ -191,9 +180,7 @@ Token Lexer::number() {
 
   std::string_view text(source_.data() + start_pos, position_ - start_pos);
 
-  auto token_type = is_float 
-    ? TokenType::FLOAT_LITERAL 
-    : TokenType::INTEGER_LITERAL;
+  auto token_type = is_float ? TokenType::FLOAT_LITERAL : TokenType::INTEGER_LITERAL;
 
   return Token(token_type, text, location);
 }
@@ -203,10 +190,10 @@ Token Lexer::string() {
   advance(); // skip opening quote
 
   std::string value;
-  while (!is_at_end() && current_ != '"') {
-    if (current_ == '\\') {
+  while (!is_at_end() && peek() != '"') {
+    if (peek() == '\\') {
       advance();
-      switch (current_) {
+      switch (peek()) {
       case 'n':
         value += '\n';
         break;
@@ -226,16 +213,16 @@ Token Lexer::string() {
         value += '\0';
         break;
       default:
-        value += current_;
+        value += peek();
         break;
       }
     } else {
-      value += current_;
+      value += peek();
     }
     advance();
   }
 
-  if (current_ == '"') {
+  if (peek() == '"') {
     advance(); // skip closing quote
   }
 
@@ -267,18 +254,11 @@ bool Lexer::is_string_start(char c) {
 }
 
 bool Lexer::is_whitespace(char c) {
-  return c == ' ' || 
-         c == '\t' || 
-         c == '\n' || 
-         c == '\r';
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
 Location Lexer::current_location() const {
-  return {line_, column_ };
-}
-
-std::optional<TokenType> Lexer::get_keyword(std::string_view text) {
-  return get_keyword_token_type(text);
+  return {line_, column_};
 }
 
 } // namespace tuz

@@ -2,14 +2,14 @@
 
 #include "token.h"
 
+#include <functional>
 #include <optional>
 #include <string_view>
 #include <vector>
-#include <functional>
 
 namespace tuz {
 
-using LexPredicate = bool(*)(char);
+using LexPredicate = bool (*)(char);
 
 class Lexer {
 public:
@@ -22,14 +22,22 @@ public:
   Token next_token();
 
   // Peek at current character
-  char peek() const { return current_; }
+  char peek() const { return peek_at(0); }
+
+  char peek_at(uint32_t offset) const {
+    auto pos = position_ + offset;
+    if (pos < source_.size()) {
+      return source_[pos];
+    }
+    return '\0';
+  }
 
 private:
   std::string_view source_;
   size_t position_;
   uint32_t line_;
   uint32_t column_;
-  char current_;
+  // char current_;
 
   void advance();
   void skip_whitespace();
@@ -41,7 +49,7 @@ private:
   Token identifier();
   Token number();
   Token string();
-  
+
   bool try_consume(std::string_view value);
   void advance_while(LexPredicate predicate);
   bool advance_if(std::string_view chars);
@@ -56,9 +64,6 @@ private:
   static bool is_identifier(char c);
   static bool is_whitespace(char c);
   static bool is_string_start(char c);
-  
-
-  static std::optional<TokenType> get_keyword(std::string_view text);
 };
 
 } // namespace tuz
