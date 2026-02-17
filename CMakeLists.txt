@@ -32,6 +32,7 @@ include_directories(include)
 
 # Source files
 set(TUZ_SOURCES
+    src/token.cpp
     src/lexer.cpp
     src/parser.cpp
     src/ast.cpp
@@ -75,6 +76,7 @@ add_test(NAME diagnostic COMMAND test_diagnostic)
 
 # Integration tests (exclude main.cpp)
 set(TUZ_LIB_SOURCES
+    src/token.cpp
     src/lexer.cpp
     src/parser.cpp
     src/ast.cpp
