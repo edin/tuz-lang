@@ -29,6 +29,7 @@ enum class TypeKind {
   Function,
   Struct,
   Reference,
+  TypeName
 };
 
 class Type : public std::enable_shared_from_this<Type> {
@@ -55,6 +56,22 @@ public:
   virtual bool equals(const Type& other) const;
   virtual size_t size() const;
   virtual size_t alignment() const;
+};
+
+class TypeName : public Type {
+public:
+  std::string type_name;
+
+  explicit TypeName(std::string type_name)
+      : Type(TypeKind::TypeName), type_name(std::move(type_name)) {}
+
+  std::string to_string() const override { return type_name; }
+
+  bool equals(const Type& other) const override { return false; }
+
+  size_t size() const override { return 0; }
+
+  size_t alignment() const override { return 0; }
 };
 
 // Pointer type
@@ -118,6 +135,7 @@ public:
   size_t size() const override;
   size_t alignment() const override;
   std::optional<size_t> get_field_offset(const std::string& field_name) const;
+  int get_field_index(const std::string& field_name) const;
   TypePtr get_field_type(const std::string& field_name) const;
 };
 

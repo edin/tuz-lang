@@ -1,5 +1,7 @@
 #pragma once
 
+#include "tuz/token.h"
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -8,7 +10,10 @@ namespace tuz {
 
 // Forward declarations
 class Type;
+struct Symbol;
+
 using TypePtr = std::shared_ptr<Type>;
+using SymbolPtr = std::shared_ptr<Symbol>;
 
 // Forward declarations for AST nodes
 struct Expr;
@@ -18,6 +23,8 @@ struct Decl;
 using ExprPtr = std::shared_ptr<Expr>;
 using StmtPtr = std::shared_ptr<Stmt>;
 using DeclPtr = std::shared_ptr<Decl>;
+
+template <typename T> using OptionalRef = std::optional<std::reference_wrapper<const T>>;
 
 // =============================================================================
 // Expressions
@@ -43,38 +50,35 @@ struct Expr {
   uint32_t line;
   uint32_t column;
 
-  Expr(ExprKind k, uint32_t ln, uint32_t col) : kind(k), line(ln), column(col) {}
+  Expr(ExprKind k, Location loc) : kind(k), line(loc.line), column(loc.column) {}
   virtual ~Expr() = default;
 };
 
 struct IntegerLiteralExpr : Expr {
   int64_t value;
-  IntegerLiteralExpr(int64_t v, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::IntegerLiteral, ln, col), value(v) {}
+  IntegerLiteralExpr(int64_t v, Location loc) : Expr(ExprKind::IntegerLiteral, loc), value(v) {}
 };
 
 struct FloatLiteralExpr : Expr {
   double value;
-  FloatLiteralExpr(double v, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::FloatLiteral, ln, col), value(v) {}
+  FloatLiteralExpr(double v, Location loc) : Expr(ExprKind::FloatLiteral, loc), value(v) {}
 };
 
 struct BoolLiteralExpr : Expr {
   bool value;
-  BoolLiteralExpr(bool v, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::BoolLiteral, ln, col), value(v) {}
+  BoolLiteralExpr(bool v, Location loc) : Expr(ExprKind::BoolLiteral, loc), value(v) {}
 };
 
 struct StringLiteralExpr : Expr {
   std::string value;
-  StringLiteralExpr(std::string v, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::StringLiteral, ln, col), value(std::move(v)) {}
+  StringLiteralExpr(std::string v, Location loc)
+      : Expr(ExprKind::StringLiteral, loc), value(std::move(v)) {}
 };
 
 struct VariableExpr : Expr {
   std::string name;
-  VariableExpr(std::string n, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::Variable, ln, col), name(std::move(n)) {}
+  SymbolPtr symbol;
+  VariableExpr(std::string n, Location loc) : Expr(ExprKind::Variable, loc), name(std::move(n)) {}
 };
 
 enum class BinaryOp {
@@ -100,8 +104,8 @@ struct BinaryOpExpr : Expr {
   BinaryOp op;
   ExprPtr left;
   ExprPtr right;
-  BinaryOpExpr(BinaryOp o, ExprPtr l, ExprPtr r, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::BinaryOp, ln, col), op(o), left(std::move(l)), right(std::move(r)) {}
+  BinaryOpExpr(BinaryOp o, ExprPtr l, ExprPtr r, Location loc)
+      : Expr(ExprKind::BinaryOp, loc), op(o), left(std::move(l)), right(std::move(r)) {}
 };
 
 enum class UnaryOp {
@@ -114,36 +118,36 @@ enum class UnaryOp {
 struct UnaryOpExpr : Expr {
   UnaryOp op;
   ExprPtr operand;
-  UnaryOpExpr(UnaryOp o, ExprPtr expr, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::UnaryOp, ln, col), op(o), operand(std::move(expr)) {}
+  UnaryOpExpr(UnaryOp o, ExprPtr expr, Location loc)
+      : Expr(ExprKind::UnaryOp, loc), op(o), operand(std::move(expr)) {}
 };
 
 struct CallExpr : Expr {
   ExprPtr callee;
   std::vector<ExprPtr> arguments;
-  CallExpr(ExprPtr c, std::vector<ExprPtr> args, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::Call, ln, col), callee(std::move(c)), arguments(std::move(args)) {}
+  CallExpr(ExprPtr c, std::vector<ExprPtr> args, Location loc)
+      : Expr(ExprKind::Call, loc), callee(std::move(c)), arguments(std::move(args)) {}
 };
 
 struct IndexExpr : Expr {
   ExprPtr array;
   ExprPtr index;
-  IndexExpr(ExprPtr arr, ExprPtr idx, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::Index, ln, col), array(std::move(arr)), index(std::move(idx)) {}
+  IndexExpr(ExprPtr arr, ExprPtr idx, Location loc)
+      : Expr(ExprKind::Index, loc), array(std::move(arr)), index(std::move(idx)) {}
 };
 
 struct FieldAccessExpr : Expr {
   ExprPtr object;
   std::string field;
-  FieldAccessExpr(ExprPtr obj, std::string f, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::FieldAccess, ln, col), object(std::move(obj)), field(std::move(f)) {}
+  FieldAccessExpr(ExprPtr obj, std::string f, Location loc)
+      : Expr(ExprKind::FieldAccess, loc), object(std::move(obj)), field(std::move(f)) {}
 };
 
 struct CastExpr : Expr {
   TypePtr target_type;
   ExprPtr expr;
-  CastExpr(TypePtr t, ExprPtr e, uint32_t ln, uint32_t col)
-      : Expr(ExprKind::Cast, ln, col), target_type(std::move(t)), expr(std::move(e)) {}
+  CastExpr(TypePtr t, ExprPtr e, Location loc)
+      : Expr(ExprKind::Cast, loc), target_type(std::move(t)), expr(std::move(e)) {}
 };
 
 // =============================================================================
@@ -166,14 +170,13 @@ struct Stmt {
   uint32_t line;
   uint32_t column;
 
-  Stmt(StmtKind k, uint32_t ln, uint32_t col) : kind(k), line(ln), column(col) {}
+  Stmt(StmtKind k, Location loc) : kind(k), line(loc.line), column(loc.column) {}
   virtual ~Stmt() = default;
 };
 
 struct ExprStmt : Stmt {
   ExprPtr expr;
-  ExprStmt(ExprPtr e, uint32_t ln, uint32_t col)
-      : Stmt(StmtKind::Expr, ln, col), expr(std::move(e)) {}
+  ExprStmt(ExprPtr e, Location loc) : Stmt(StmtKind::Expr, loc), expr(std::move(e)) {}
 };
 
 struct LetStmt : Stmt {
@@ -181,38 +184,39 @@ struct LetStmt : Stmt {
   TypePtr declared_type;
   ExprPtr initializer;
   bool is_mutable;
-  LetStmt(std::string n, TypePtr t, ExprPtr init, bool mut, uint32_t ln, uint32_t col)
-      : Stmt(StmtKind::Let, ln, col), name(std::move(n)), declared_type(std::move(t)),
+  SymbolPtr symbol;
+  LetStmt(std::string n, TypePtr t, ExprPtr init, bool mut, Location loc)
+      : Stmt(StmtKind::Let, loc), name(std::move(n)), declared_type(std::move(t)),
         initializer(std::move(init)), is_mutable(mut) {}
 };
 
 struct AssignStmt : Stmt {
   ExprPtr target;
   ExprPtr value;
-  AssignStmt(ExprPtr tgt, ExprPtr val, uint32_t ln, uint32_t col)
-      : Stmt(StmtKind::Assign, ln, col), target(std::move(tgt)), value(std::move(val)) {}
+  AssignStmt(ExprPtr tgt, ExprPtr val, Location loc)
+      : Stmt(StmtKind::Assign, loc), target(std::move(tgt)), value(std::move(val)) {}
 };
 
 struct BlockStmt : Stmt {
   std::vector<StmtPtr> statements;
-  BlockStmt(std::vector<StmtPtr> stmts, uint32_t ln, uint32_t col)
-      : Stmt(StmtKind::Block, ln, col), statements(std::move(stmts)) {}
+  BlockStmt(std::vector<StmtPtr> stmts, Location loc)
+      : Stmt(StmtKind::Block, loc), statements(std::move(stmts)) {}
 };
 
 struct IfStmt : Stmt {
   ExprPtr condition;
   StmtPtr then_branch;
   StmtPtr else_branch; // Can be nullptr
-  IfStmt(ExprPtr cond, StmtPtr then_br, StmtPtr else_br, uint32_t ln, uint32_t col)
-      : Stmt(StmtKind::If, ln, col), condition(std::move(cond)), then_branch(std::move(then_br)),
+  IfStmt(ExprPtr cond, StmtPtr then_br, StmtPtr else_br, Location loc)
+      : Stmt(StmtKind::If, loc), condition(std::move(cond)), then_branch(std::move(then_br)),
         else_branch(std::move(else_br)) {}
 };
 
 struct WhileStmt : Stmt {
   ExprPtr condition;
   StmtPtr body;
-  WhileStmt(ExprPtr cond, StmtPtr b, uint32_t ln, uint32_t col)
-      : Stmt(StmtKind::While, ln, col), condition(std::move(cond)), body(std::move(b)) {}
+  WhileStmt(ExprPtr cond, StmtPtr b, Location loc)
+      : Stmt(StmtKind::While, loc), condition(std::move(cond)), body(std::move(b)) {}
 };
 
 struct ForStmt : Stmt {
@@ -220,15 +224,15 @@ struct ForStmt : Stmt {
   ExprPtr range_start;
   ExprPtr range_end;
   StmtPtr body;
-  ForStmt(std::string var, ExprPtr start, ExprPtr end, StmtPtr b, uint32_t ln, uint32_t col)
-      : Stmt(StmtKind::For, ln, col), var_name(std::move(var)), range_start(std::move(start)),
+  SymbolPtr symbol;
+  ForStmt(std::string var, ExprPtr start, ExprPtr end, StmtPtr b, Location loc)
+      : Stmt(StmtKind::For, loc), var_name(std::move(var)), range_start(std::move(start)),
         range_end(std::move(end)), body(std::move(b)) {}
 };
 
 struct ReturnStmt : Stmt {
   ExprPtr value; // Can be nullptr for void return
-  ReturnStmt(ExprPtr val, uint32_t ln, uint32_t col)
-      : Stmt(StmtKind::Return, ln, col), value(std::move(val)) {}
+  ReturnStmt(ExprPtr val, Location loc) : Stmt(StmtKind::Return, loc), value(std::move(val)) {}
 };
 
 // =============================================================================
@@ -247,14 +251,15 @@ struct Decl {
   uint32_t line;
   uint32_t column;
 
-  Decl(DeclKind k, std::string n, uint32_t ln, uint32_t col)
-      : kind(k), name(std::move(n)), line(ln), column(col) {}
+  Decl(DeclKind k, std::string n, Location loc)
+      : kind(k), name(std::move(n)), line(loc.line), column(loc.column) {}
   virtual ~Decl() = default;
 };
 
 struct Param {
   std::string name;
   TypePtr type;
+  SymbolPtr symbol;
   Param(std::string n, TypePtr t) : name(std::move(n)), type(std::move(t)) {}
 };
 
@@ -264,9 +269,8 @@ struct FunctionDecl : Decl {
   StmtPtr body; // BlockStmt, can be nullptr for extern
   bool is_extern;
 
-  FunctionDecl(std::string n, std::vector<Param> p, TypePtr ret, StmtPtr b, bool ext, uint32_t ln,
-               uint32_t col)
-      : Decl(DeclKind::Function, std::move(n), ln, col), params(std::move(p)),
+  FunctionDecl(std::string n, std::vector<Param> p, TypePtr ret, StmtPtr b, bool ext, Location loc)
+      : Decl(DeclKind::Function, std::move(n), loc), params(std::move(p)),
         return_type(std::move(ret)), body(std::move(b)), is_extern(ext) {}
 };
 
@@ -278,17 +282,96 @@ struct Field {
 
 struct StructDecl : Decl {
   std::vector<Field> fields;
-  StructDecl(std::string n, std::vector<Field> f, uint32_t ln, uint32_t col)
-      : Decl(DeclKind::Struct, std::move(n), ln, col), fields(std::move(f)) {}
+  StructDecl(std::string n, std::vector<Field> f, Location loc)
+      : Decl(DeclKind::Struct, std::move(n), loc), fields(std::move(f)) {}
 };
 
 struct GlobalDecl : Decl {
   TypePtr type;
   ExprPtr initializer;
   bool is_mutable;
-  GlobalDecl(std::string n, TypePtr t, ExprPtr init, bool mut, uint32_t ln, uint32_t col)
-      : Decl(DeclKind::Global, std::move(n), ln, col), type(std::move(t)),
-        initializer(std::move(init)), is_mutable(mut) {}
+  GlobalDecl(std::string n, TypePtr t, ExprPtr init, bool mut, Location loc)
+      : Decl(DeclKind::Global, std::move(n), loc), type(std::move(t)), initializer(std::move(init)),
+        is_mutable(mut) {}
+};
+
+// =============================================================================
+// Scope
+// =============================================================================
+
+enum class SymbolKind { Variable, Function, Struct, Field };
+
+struct Symbol {
+  SymbolKind kind;
+  std::string name;
+  Symbol(SymbolKind k, std::string n) : kind(k), name(std::move(n)) {}
+  virtual ~Symbol() = default;
+};
+
+struct VariableSymbol : public Symbol {
+  TypePtr type;
+  VariableSymbol(std::string n, TypePtr t)
+      : Symbol(SymbolKind::Variable, std::move(n)), type(std::move(t)) {}
+};
+
+struct FunctionSymbol : public Symbol {
+  TypePtr type;
+  FunctionSymbol(std::string n, TypePtr t)
+      : Symbol(SymbolKind::Function, std::move(n)), type(std::move(t)) {}
+};
+
+struct StructSymbol : public Symbol {
+  TypePtr type;
+  StructSymbol(std::string name, TypePtr type)
+      : Symbol(SymbolKind::Struct, std::move(name)), type(std::move(type)) {}
+};
+
+class Scope {
+public:
+  Scope* parent;
+
+  std::unordered_map<std::string, std::vector<SymbolPtr>> symbols;
+
+  explicit Scope(Scope* p = nullptr) : parent(p) {}
+
+  void declare(SymbolPtr symbol) { symbols[symbol->name].push_back(std::move(symbol)); }
+
+  OptionalRef<SymbolPtr> lookup_first(const std::string name) const {
+    if (auto symbols = lookup(name)) {
+      const auto& vec = symbols->get();
+
+      if (!vec.empty())
+        return std::cref(vec.front());
+    }
+    return std::nullopt;
+  }
+
+  OptionalRef<SymbolPtr> lookup_first_local(const std::string name) const {
+    if (auto symbols = lookup_local(name)) {
+      const auto& vec = symbols->get();
+
+      if (!vec.empty())
+        return std::cref(vec.front());
+    }
+    return std::nullopt;
+  }
+
+  OptionalRef<std::vector<SymbolPtr>> lookup_local(const std::string& name) const {
+    auto it = symbols.find(name);
+    if (it != symbols.end()) {
+      return std::cref(it->second);
+    }
+    return std::nullopt;
+  }
+
+  OptionalRef<std::vector<SymbolPtr>> lookup(const std::string& name) const {
+    for (const Scope* s = this; s != nullptr; s = s->parent) {
+      if (auto result = s->lookup_local(name)) {
+        return result;
+      }
+    }
+    return std::nullopt;
+  }
 };
 
 // =============================================================================
@@ -297,6 +380,7 @@ struct GlobalDecl : Decl {
 
 struct Program {
   std::vector<DeclPtr> declarations;
+  Scope scope;
 };
 
 // =============================================================================
@@ -340,5 +424,23 @@ public:
 void visit_expr(ASTVisitor& visitor, Expr& expr);
 void visit_stmt(ASTVisitor& visitor, Stmt& stmt);
 void visit_decl(ASTVisitor& visitor, Decl& decl);
+
+class ASTVisitorDelux : public ASTVisitor {
+public:
+  void visit_node(ExprPtr& node) {
+    if (node)
+      visit_expr(*this, *node);
+  }
+
+  void visit_node(StmtPtr& node) {
+    if (node)
+      visit_stmt(*this, *node);
+  }
+
+  void visit_node(DeclPtr& node) {
+    if (node)
+      visit_decl(*this, *node);
+  }
+};
 
 } // namespace tuz

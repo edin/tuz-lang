@@ -119,6 +119,8 @@ private:
                                  TypePtr result_type);
   llvm::Value* codegen_unary_op(UnaryOp op, llvm::Value* operand, TypePtr result_type);
 
+  llvm::Value* codegen_expr_address(Expr& expr);
+
   // Statement code generation
   void codegen_stmt(Stmt& stmt);
 
